@@ -39,21 +39,50 @@ function isAlreadyNormalized(text: string, target?: string): boolean {
 function smartReplace(
   text: string,
   pattern: RegExp | string,
-  replacement: string
+  replacement: string,
+  whitelist: string[] = []
 ): string {
   if (isAlreadyNormalized(text, replacement)) {
     return text
   }
+
+  for (const whiteItem of whitelist) {
+    if (whiteItem && text.trim() === whiteItem.trim()) {
+      return text
+    }
+  }
   
   if (pattern instanceof RegExp) {
-    return text.replace(pattern, replacement)
+    let result = text
+    for (const whiteItem of whitelist) {
+      if (!whiteItem) continue
+      const escaped = whiteItem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const whitePattern = new RegExp(escaped, 'g')
+      result = result.replace(whitePattern, `\x00WHITE\x00${whiteItem}\x00END\x00`)
+    }
+    
+    result = result.replace(pattern, replacement)
+    
+    result = result.replace(/\x00WHITE\x00(.*?)\x00END\x00/g, '$1')
+    return result
+  }
+  
+  let result = text
+  for (const whiteItem of whitelist) {
+    if (!whiteItem) continue
+    const escaped = whiteItem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const whitePattern = new RegExp(escaped, 'g')
+    result = result.replace(whitePattern, `\x00WHITE\x00${whiteItem}\x00END\x00`)
   }
   
   const wordBoundaryPattern = new RegExp(
     `(?<![\\u4e00-\\u9fa5a-zA-Z])${pattern}(?![\\u4e00-\\u9fa5a-zA-Z])`,
     'g'
   )
-  return text.replace(wordBoundaryPattern, replacement)
+  result = result.replace(wordBoundaryPattern, replacement)
+  
+  result = result.replace(/\x00WHITE\x00(.*?)\x00END\x00/g, '$1')
+  return result
 }
 
 export function applyBatchReplace(
@@ -64,9 +93,10 @@ export function applyBatchReplace(
   
   const updatedItem = { ...item }
   const pattern = rule.isRegex ? new RegExp(rule.pattern, 'g') : rule.pattern
+  const whitelist = rule.whitelist || []
   
   for (const field of rule.targetFields) {
-    const newValue = replaceFieldValue(updatedItem, field, pattern, rule.replacement)
+    const newValue = replaceFieldValue(updatedItem, field, pattern, rule.replacement, whitelist)
     ;(updatedItem as any)[field] = newValue
   }
   
@@ -77,7 +107,8 @@ function replaceFieldValue(
   item: ItemRecord,
   field: FieldType,
   pattern: RegExp | string,
-  replacement: string
+  replacement: string,
+  whitelist: string[]
 ): ItemRecord[FieldType] {
   const currentValue = getFieldValue(item, field)
   
@@ -90,40 +121,45 @@ function replaceFieldValue(
     case 'handlingLocation':
     case 'onlineUrl':
     case 'consultPhone':
-      return smartReplace(currentValue, pattern, replacement)
+      return smartReplace(currentValue, pattern, replacement, whitelist)
     
     case 'acceptConditions':
       return item.acceptConditions.map(cond => ({
         ...cond,
-        content: smartReplace(cond.content, pattern, replacement)
+        content: smartReplace(cond.content, pattern, replacement, whitelist)
       })) as ItemRecord['acceptConditions']
     
     case 'materials':
       return item.materials.map(mat => ({
         ...mat,
-        name: smartReplace(mat.name, pattern, replacement),
-        notes: mat.notes ? smartReplace(mat.notes, pattern, replacement) : mat.notes
+        name: smartReplace(mat.name, pattern, replacement, whitelist),
+        notes: mat.notes ? smartReplace(mat.notes, pattern, replacement, whitelist) : mat.notes
       })) as ItemRecord['materials']
     
     case 'processSteps':
       return item.processSteps.map(step => ({
         ...step,
-        stepName: smartReplace(step.stepName, pattern, replacement),
-        description: smartReplace(step.description, pattern, replacement),
-        handler: smartReplace(step.handler, pattern, replacement)
+        stepName: smartReplace(step.stepName, pattern, replacement, whitelist),
+        description: smartReplace(step.description, pattern, replacement, whitelist),
+        handler: smartReplace(step.handler, pattern, replacement, whitelist)
       })) as ItemRecord['processSteps']
     
     case 'specialProcedures':
       return item.specialProcedures.map(proc => ({
         ...proc,
-        type: smartReplace(proc.type, pattern, replacement),
-        condition: smartReplace(proc.condition, pattern, replacement),
-        description: smartReplace(proc.description, pattern, replacement)
+        type: smartReplace(proc.type, pattern, replacement, whitelist),
+        condition: smartReplace(proc.condition, pattern, replacement, whitelist),
+        description: smartReplace(proc.description, pattern, replacement, whitelist)
       })) as ItemRecord['specialProcedures']
     
     default:
       return item[field]
   }
+}
+
+export function testRuleReplace(text: string, rule: BatchReplaceRule): string {
+  const pattern = rule.isRegex ? new RegExp(rule.pattern, 'g') : rule.pattern
+  return smartReplace(text, pattern, rule.replacement, rule.whitelist || [])
 }
 
 export function applyBatchRules(
@@ -179,7 +215,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '身份证明',
     isRegex: false,
     targetFields: ['materials'],
-    enabled: true
+    enabled: true,
+    whitelist: ['居民身份证', '身份证件', '临时身份证', '二代身份证']
   },
   {
     id: 'rule-2',
@@ -188,7 +225,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '户口本',
     isRegex: false,
     targetFields: ['materials'],
-    enabled: true
+    enabled: true,
+    whitelist: ['居民户口簿', '户口薄原件']
   },
   {
     id: 'rule-3',
@@ -197,7 +235,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '营业执照',
     isRegex: false,
     targetFields: ['materials'],
-    enabled: true
+    enabled: true,
+    whitelist: []
   },
   {
     id: 'rule-4',
@@ -206,7 +245,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '申请表',
     isRegex: false,
     targetFields: ['materials'],
-    enabled: true
+    enabled: true,
+    whitelist: ['申请表格', '书面申请书']
   },
   {
     id: 'rule-5',
@@ -215,7 +255,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '（明确具体材料）',
     isRegex: false,
     targetFields: ['materials', 'acceptConditions'],
-    enabled: true
+    enabled: true,
+    whitelist: []
   },
   {
     id: 'rule-6',
@@ -224,7 +265,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '（明确具体材料）',
     isRegex: false,
     targetFields: ['materials', 'acceptConditions'],
-    enabled: true
+    enabled: true,
+    whitelist: []
   },
   {
     id: 'rule-7',
@@ -233,7 +275,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '$1个工作日',
     isRegex: true,
     targetFields: ['timeLimit', 'processSteps'],
-    enabled: true
+    enabled: true,
+    whitelist: []
   },
   {
     id: 'rule-8',
@@ -242,7 +285,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '',
     isRegex: false,
     targetFields: ['acceptConditions', 'materials', 'processSteps', 'specialProcedures'],
-    enabled: true
+    enabled: true,
+    whitelist: []
   },
   {
     id: 'rule-9',
@@ -251,7 +295,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '$1-$2',
     isRegex: true,
     targetFields: ['consultPhone'],
-    enabled: true
+    enabled: true,
+    whitelist: []
   },
   {
     id: 'rule-10',
@@ -260,7 +305,8 @@ export const DEFAULT_BATCH_RULES: BatchReplaceRule[] = [
     replacement: '申请人',
     isRegex: true,
     targetFields: ['acceptConditions', 'processSteps', 'specialProcedures'],
-    enabled: true
+    enabled: true,
+    whitelist: []
   }
 ]
 

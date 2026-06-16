@@ -125,6 +125,21 @@ export interface BatchReplaceRule {
   isRegex: boolean
   targetFields: FieldType[]
   enabled: boolean
+  whitelist: string[]
+}
+
+export interface BatchChangeRecord {
+  id: string
+  timestamp: number
+  ruleIds: string[]
+  changes: Array<{
+    itemId: string
+    itemName: string
+    field: FieldType
+    oldValue: string
+    newValue: string
+  }>
+  itemSnapshots: ItemRecord[]
 }
 
 export interface CompareResult {
@@ -156,6 +171,7 @@ export interface AppState {
   compareItemIds: [string, string] | null
   issues: Issue[]
   batchRules: BatchReplaceRule[]
+  batchHistory: BatchChangeRecord[]
   currentWorkspace: WorkspaceType
   filterType: IssueType | 'all'
   filterDepartment: string
