@@ -284,6 +284,7 @@ export function CompareWorkspace() {
                             {diff ? (
                               <DiffHighlight
                                 segments={diff.diffSegments}
+                                side="left"
                                 className="text-sm text-gray-800"
                               />
                             ) : (
@@ -303,10 +304,8 @@ export function CompareWorkspace() {
                           <div className="flex-1 p-3 border-l border-gray-200 min-h-[60px]">
                             {diff ? (
                               <DiffHighlight
-                                segments={diff.diffSegments.map(s => ({
-                                  ...s,
-                                  type: s.type === 'added' ? 'added' : s.type === 'removed' ? 'removed' : s.type
-                                }))}
+                                segments={diff.diffSegments}
+                                side="right"
                                 className="text-sm text-gray-800"
                               />
                             ) : (

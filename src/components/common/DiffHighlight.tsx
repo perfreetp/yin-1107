@@ -3,12 +3,31 @@ import type { DiffSegment } from '@/types'
 interface DiffHighlightProps {
   segments: DiffSegment[]
   className?: string
+  side?: 'left' | 'right' | 'combined'
 }
 
-export function DiffHighlight({ segments, className = '' }: DiffHighlightProps) {
+export function DiffHighlight({ segments, className = '', side = 'combined' }: DiffHighlightProps) {
+  const filterSegments = (segs: DiffSegment[]): DiffSegment[] => {
+    if (side === 'left') {
+      return segs.map(s => {
+        if (s.type === 'added') return null
+        return s
+      }).filter(Boolean) as DiffSegment[]
+    }
+    if (side === 'right') {
+      return segs.map(s => {
+        if (s.type === 'removed') return null
+        return s
+      }).filter(Boolean) as DiffSegment[]
+    }
+    return segs
+  }
+
+  const displaySegments = filterSegments(segments)
+
   return (
     <span className={className}>
-      {segments.map((segment, index) => {
+      {displaySegments.map((segment, index) => {
         if (segment.type === 'added') {
           return (
             <span

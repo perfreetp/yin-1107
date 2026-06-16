@@ -6,7 +6,10 @@ import type {
   ImportSource,
   Issue,
   ReviewReport,
-  AcceptCondition
+  AcceptCondition,
+  MaterialItem,
+  ProcessStep,
+  SpecialProcedure
 } from '@/types'
 
 const EXCEL_FIELD_MAP: Record<string, keyof ItemRecord> = {
@@ -429,8 +432,8 @@ export function exportToExcel(items: ItemRecord[], issues: Issue[], fileName: st
   saveAs(data, fileName)
 }
 
-export function exportToJson(items: ItemRecord[], fileName: string): void {
-  const dataStr = JSON.stringify(items, null, 2)
+export function exportToJson(data: unknown, fileName: string): void {
+  const dataStr = JSON.stringify(data, null, 2)
   const blob = new Blob([dataStr], { type: 'application/json' })
   saveAs(blob, fileName)
 }
@@ -442,7 +445,31 @@ export function exportReport(report: ReviewReport, items: ItemRecord[], format: 
   if (format === 'excel') {
     exportToExcel(items, report.details, `${fileName}.xlsx`)
   } else if (format === 'json') {
-    exportToJson(items, `${fileName}.json`)
+    const fullReport = {
+      reportInfo: {
+        id: report.id,
+        createTime: report.createTime,
+        summary: report.summary,
+        statistics: {
+          totalItems: report.totalItems,
+          reviewedItems: report.reviewedItems,
+          totalIssues: report.totalIssues,
+          resolvedIssues: report.resolvedIssues,
+          pendingIssues: report.totalIssues - report.resolvedIssues
+        },
+        issuesByType: report.issuesByType,
+        issuesByDepartment: report.issuesByDepartment
+      },
+      items: items,
+      issues: report.details,
+      suggestions: [
+        '建议优先处理严重程度为"严重"的问题',
+        '建议统一材料名称规范，参照国家标准术语',
+        '建议完善特殊程序设置，确保符合法定要求',
+        '建议定期开展清单审校，保持数据准确性'
+      ]
+    }
+    exportToJson(fullReport, `${fileName}.json`)
   } else if (format === 'html') {
     const html = generateHtmlReport(report)
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
@@ -450,7 +477,7 @@ export function exportReport(report: ReviewReport, items: ItemRecord[], format: 
   }
 }
 
-function generateHtmlReport(report: ReviewReport): string {
+export function generateHtmlReport(report: ReviewReport): string {
   const issueTypeLabels: Record<string, string> = {
     field_diff: '字段差异',
     condition_conflict: '受理条件冲突',

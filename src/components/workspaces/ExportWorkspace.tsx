@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react'
+import { saveAs } from 'file-saver'
 import {
   Download, FileSpreadsheet, FileJson, FileText,
   Check, AlertTriangle, FileCode, BarChart3, Users,
   PieChart, ChevronRight, Eye
 } from 'lucide-react'
 import { useApp } from '@/context/AppContext'
-import { exportToExcel, exportToJson, exportReport, generateReviewReport } from '@/core/importExportEngine'
+import { exportToExcel, exportToJson, exportReport, generateReviewReport, generateHtmlReport } from '@/core/importExportEngine'
 import type { ReviewReport } from '@/types'
 import { ISSUE_TYPE_LABELS, type IssueType } from '@/types'
 
@@ -31,17 +32,46 @@ export function ExportWorkspace() {
       if (includeItems && includeIssues && report) {
         exportReport(report, state.items, exportFormat)
       } else if (includeItems) {
-        const filename = `事项清单_${new Date().toISOString().slice(0, 10)}.${exportFormat === 'json' ? 'json' : 'xlsx'}`
+        const timestamp = new Date().toISOString().slice(0, 10)
         if (exportFormat === 'json') {
-          exportToJson(state.items, filename)
+          const filename = `事项清单_${timestamp}.json`
+          exportToJson({
+            exportType: 'items_only',
+            exportTime: Date.now(),
+            items: state.items
+          }, filename)
+        } else if (exportFormat === 'html') {
+          const filename = `事项清单_${timestamp}.html`
+          const itemsReport = generateReviewReport(state.items, [], '仅包含事项清单数据')
+          const html = generateHtmlReport(itemsReport)
+          const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+          saveAs(blob, filename)
         } else {
+          const filename = `事项清单_${timestamp}.xlsx`
           exportToExcel(state.items, [], filename)
         }
       } else if (includeIssues && report) {
-        const filename = `问题清单_${new Date().toISOString().slice(0, 10)}.${exportFormat === 'json' ? 'json' : 'xlsx'}`
+        const timestamp = new Date().toISOString().slice(0, 10)
         if (exportFormat === 'json') {
-          exportToJson(state.items, filename)
+          const filename = `问题清单_${timestamp}.json`
+          exportToJson({
+            exportType: 'issues_only',
+            exportTime: Date.now(),
+            statistics: {
+              totalIssues: state.issues.length,
+              resolvedIssues: state.issues.filter(i => i.status === 'resolved').length,
+              pendingIssues: state.issues.filter(i => i.status === 'pending').length
+            },
+            issues: state.issues
+          }, filename)
+        } else if (exportFormat === 'html') {
+          const filename = `问题清单_${timestamp}.html`
+          const issuesReport = generateReviewReport([], state.issues, '仅包含问题清单数据')
+          const html = generateHtmlReport(issuesReport)
+          const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+          saveAs(blob, filename)
         } else {
+          const filename = `问题清单_${timestamp}.xlsx`
           exportToExcel([], state.issues, filename)
         }
       }

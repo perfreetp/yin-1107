@@ -5,6 +5,57 @@ import type {
 } from '@/types'
 import { getFieldValue } from './diffEngine'
 
+const STANDARD_NAMES = [
+  '身份证明', '户口本', '营业执照', '申请表', '委托书',
+  '学历证明', '工作证明', '照片', '房产证'
+]
+
+function isAlreadyNormalized(text: string, target?: string): boolean {
+  const normalizedText = text.trim().toLowerCase()
+  
+  if (target) {
+    const normalizedTarget = target.trim().toLowerCase()
+    if (normalizedText === normalizedTarget) return true
+    
+    for (const stdName of STANDARD_NAMES) {
+      if (normalizedText.includes(stdName.toLowerCase()) && 
+          normalizedTarget.includes(stdName.toLowerCase())) {
+        return true
+      }
+    }
+  } else {
+    for (const stdName of STANDARD_NAMES) {
+      if (normalizedText === stdName.toLowerCase() || 
+          normalizedText.includes(stdName.toLowerCase() + '原件') ||
+          normalizedText.includes(stdName.toLowerCase() + '复印件')) {
+        return true
+      }
+    }
+  }
+  
+  return false
+}
+
+function smartReplace(
+  text: string,
+  pattern: RegExp | string,
+  replacement: string
+): string {
+  if (isAlreadyNormalized(text, replacement)) {
+    return text
+  }
+  
+  if (pattern instanceof RegExp) {
+    return text.replace(pattern, replacement)
+  }
+  
+  const wordBoundaryPattern = new RegExp(
+    `(?<![\\u4e00-\\u9fa5a-zA-Z])${pattern}(?![\\u4e00-\\u9fa5a-zA-Z])`,
+    'g'
+  )
+  return text.replace(wordBoundaryPattern, replacement)
+}
+
 export function applyBatchReplace(
   item: ItemRecord,
   rule: BatchReplaceRule
@@ -39,35 +90,35 @@ function replaceFieldValue(
     case 'handlingLocation':
     case 'onlineUrl':
     case 'consultPhone':
-      return currentValue.replace(pattern, replacement)
+      return smartReplace(currentValue, pattern, replacement)
     
     case 'acceptConditions':
       return item.acceptConditions.map(cond => ({
         ...cond,
-        content: cond.content.replace(pattern, replacement)
+        content: smartReplace(cond.content, pattern, replacement)
       })) as ItemRecord['acceptConditions']
     
     case 'materials':
       return item.materials.map(mat => ({
         ...mat,
-        name: mat.name.replace(pattern, replacement),
-        notes: mat.notes ? mat.notes.replace(pattern, replacement) : mat.notes
+        name: smartReplace(mat.name, pattern, replacement),
+        notes: mat.notes ? smartReplace(mat.notes, pattern, replacement) : mat.notes
       })) as ItemRecord['materials']
     
     case 'processSteps':
       return item.processSteps.map(step => ({
         ...step,
-        stepName: step.stepName.replace(pattern, replacement),
-        description: step.description.replace(pattern, replacement),
-        handler: step.handler.replace(pattern, replacement)
+        stepName: smartReplace(step.stepName, pattern, replacement),
+        description: smartReplace(step.description, pattern, replacement),
+        handler: smartReplace(step.handler, pattern, replacement)
       })) as ItemRecord['processSteps']
     
     case 'specialProcedures':
       return item.specialProcedures.map(proc => ({
         ...proc,
-        type: proc.type.replace(pattern, replacement),
-        condition: proc.condition.replace(pattern, replacement),
-        description: proc.description.replace(pattern, replacement)
+        type: smartReplace(proc.type, pattern, replacement),
+        condition: smartReplace(proc.condition, pattern, replacement),
+        description: smartReplace(proc.description, pattern, replacement)
       })) as ItemRecord['specialProcedures']
     
     default:
@@ -253,9 +304,20 @@ export function normalizeMaterialName(name: string): string {
   
   let normalized = name.trim()
   
+  if (isAlreadyNormalized(normalized, '')) {
+    return normalized
+  }
+  
   for (const [from, to] of Object.entries(normalizeMap)) {
-    if (normalized.includes(from) && !normalized.includes(to)) {
-      normalized = normalized.replace(from, to)
+    if (normalized.includes(to)) {
+      continue
+    }
+    if (normalized.includes(from)) {
+      const wordBoundaryPattern = new RegExp(
+        `(?<![\\u4e00-\\u9fa5a-zA-Z])${from}(?![\\u4e00-\\u9fa5a-zA-Z])`,
+        'g'
+      )
+      normalized = normalized.replace(wordBoundaryPattern, to)
     }
   }
   
